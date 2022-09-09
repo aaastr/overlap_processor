@@ -1,5 +1,4 @@
 import logging
-import sys
 from typing import Literal, Tuple, Dict, List, Union
 
 import numpy as np
@@ -37,12 +36,22 @@ class OverlapPostProcessor:
         self.len_predictions = len(self.prediction_dict["boxes"])
         self.overlap_idxs = None
 
+    def post_process(
+        self,
+        overlap_strategy: Literal["distribute_by_confidence", "filter_by_confidence"],
+        soft_mask_threshold: float = 0.5,
+    ) -> np.ndarray:
+        r"Post process predictions."
+        self._remove_duplicates()
+        overlaps = self._find_overlaps()
+        return self._handle_overlaps(overlaps, overlap_strategy, soft_mask_threshold)
+
     @property
     def image_size(self) -> Tuple:
         r"Return image size as tuple."
         return self.image.size
 
-    def remove_instances_in_predictions(self, rows: Union[int, List[int], np.ndarray, List[np.ndarray]]):
+    def _remove_instances_in_predictions(self, rows: Union[int, List[int], np.ndarray, List[np.ndarray]]):
         r"Remove row in prediction."
         for key, value in self.prediction_dict.items():
             self.prediction_dict[key] = np.delete(value, rows, axis=0)
@@ -52,19 +61,9 @@ class OverlapPostProcessor:
         _, unique_idxs = np.unique(self.prediction_dict["boxes"], axis=0, return_index=True)
         for idx in range(self.len_predictions):
             if idx not in unique_idxs:
-                self.remove_instances_in_predictions(idx)
+                self._remove_instances_in_predictions(idx)
 
-    def post_process(
-        self,
-        overlap_strategy: Literal["distribute_by_confidence", "filter_by_confidence"],
-        soft_mask_threshold: float = 0.5,
-    ) -> np.ndarray:
-        r"Post process predictions."
-        self.remove_duplicates()
-        overlaps = self.find_overlaps()
-        return self.handle_overlaps(overlaps, overlap_strategy, soft_mask_threshold)
-
-    def handle_overlaps(
+    def _handle_overlaps(
         self,
         overlaps,
         overlap_strategy: Literal["distribute_by_confidence", "filter_by_confidence"],
@@ -72,15 +71,15 @@ class OverlapPostProcessor:
     ):
         r"Handle overlapping predictions."
         if overlap_strategy == "distribute_by_confidence":
-            self.distribute_by_confidence(overlaps)
+            self._distribute_by_confidence_if_overlaps_exist(overlaps)
         elif overlap_strategy == "filter_by_confidence":
-            self.filter_by_confidence(overlaps)
+            self._filter_by_confidence_if_overlaps_exist(overlaps)
         else:
             logging.warning("Overlap_strategy {overlap_strategy} not supported")
             raise ValueError(f"Overlap_strategy {overlap_strategy} not supported")
-        return self.create_object_id_map(self.prediction_dict, soft_mask_threshold)
+        return self._create_object_id_map(self.prediction_dict, soft_mask_threshold)
 
-    def find_overlaps(self) -> np.ndarray:
+    def _find_overlaps(self) -> np.ndarray:
         r"Find overlapping predictions."
 
         def boxes_are_overlapping(box1, box2) -> bool:
@@ -97,13 +96,13 @@ class OverlapPostProcessor:
         self.overlap_idxs = np.array(overlaps)
         return self.overlap_idxs
 
-    def remove_duplicates(self):
+    def _remove_duplicates(self):
         r"Remove duplicate predictions. Find boxes with identical coordinates."
         logging.info("Remove duplicate predictions")
         self._deduplicate_predictions()
         return self.prediction_dict
 
-    def scale_mask_to_box(self, mask, box):
+    def _scale_mask_to_box(self, mask, box):
         r"Scale 2d mask to bounding box size with scikit-image resize."
         mask = resize(mask, (box[3] - box[1], box[2] - box[0]), anti_aliasing=False)
         return mask
@@ -114,7 +113,7 @@ class OverlapPostProcessor:
         x3, y3, x4, y4 = box2
         return np.array([min(x1, x3), min(y1, y3), max(x2, x4), max(y2, y4)])
 
-    def distribute_by_confidence(self, overlaps):
+    def _distribute_by_confidence_if_overlaps_exist(self, overlaps):
         r"Distribute overlapping predictions by confidence."
         if len(overlaps) == 0:
             logging.info("No overlaps found")
@@ -127,7 +126,7 @@ class OverlapPostProcessor:
         for key, value in self.prediction_dict.items():
             self.prediction_dict[key] = value[idxs]
 
-    def filter_by_confidence(self, overlaps):
+    def _filter_by_confidence_if_overlaps_exist(self, overlaps):
         r"Filter overlapping predictions by confidence."
         if len(overlaps) == 0:
             logging.info("No overlaps found.")
@@ -146,14 +145,14 @@ class OverlapPostProcessor:
                 idxs_to_remove.append(idx1)
         unique_idxs_to_remove = np.unique(idxs_to_remove)
         logging.info(f"Removing {len(unique_idxs_to_remove)} predictions")
-        self.remove_instances_in_predictions(unique_idxs_to_remove)
+        self._remove_instances_in_predictions(unique_idxs_to_remove)
 
-    def create_object_id_map(self, prediction_dict, soft_mask_threshold):
+    def _create_object_id_map(self, prediction_dict, soft_mask_threshold):
         r"Create object_id_map from predictions with the resolution of the image. 1-indexed"
         object_id_map = np.zeros(self.image_size, dtype=np.uint8)
         for idx, (box, mask) in enumerate(zip(prediction_dict["boxes"], prediction_dict["masks"])):
             y1, x1, y2, x2 = box
             mask = mask > soft_mask_threshold
-            mask = self.scale_mask_to_box(mask, box)
+            mask = self._scale_mask_to_box(mask, box)
             object_id_map[x1:x2, y1:y2][mask] = idx + 1
         return object_id_map.T

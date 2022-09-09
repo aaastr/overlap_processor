@@ -18,7 +18,7 @@ def test_remove_duplicates():
     }
 
     processor = OverlapPostProcessor(mock_image, mock_predictions)
-    deduplicated_predictions = processor.remove_duplicates()
+    deduplicated_predictions = processor._remove_duplicates()
 
     assert "boxes" in deduplicated_predictions
     assert "scores" in deduplicated_predictions
@@ -45,7 +45,7 @@ def test_remove_instance_in_predictions():
     }
 
     processor = OverlapPostProcessor(mock_image, mock_predictions)
-    processor.remove_instances_in_predictions(2)
+    processor._remove_instances_in_predictions(2)
 
     assert "boxes" in processor.prediction_dict
     assert "scores" in processor.prediction_dict
@@ -87,7 +87,7 @@ def test_find_overlaps():
     }
 
     processor = OverlapPostProcessor(mock_image, mock_predictions)
-    overlaps = processor.find_overlaps()
+    overlaps = processor._find_overlaps()
 
     assert len(overlaps) == 2
     assert np.array_equal(overlaps[0], np.array([0, 1]))
@@ -117,7 +117,7 @@ def test_scale_mask_to_box():
     mock_box = np.array([0, 0, 50, 50])
 
     processor = OverlapPostProcessor(mock_image, mock_predictions)
-    scaled_mask = processor.scale_mask_to_box(mock_mask, mock_box)
+    scaled_mask = processor._scale_mask_to_box(mock_mask, mock_box)
     print(scaled_mask)
     assert scaled_mask.shape == (50, 50)
     assert scaled_mask[0, 0] == 0.5
@@ -138,7 +138,7 @@ def test_create_object_id_map():
     }
 
     processor = OverlapPostProcessor(mock_image, mock_predictions)
-    object_id_map = processor.create_object_id_map(mock_predictions, 0.5)
+    object_id_map = processor._create_object_id_map(mock_predictions, 0.5)
 
     assert object_id_map.shape == (56, 56)
     assert object_id_map[0, 0] == 1
@@ -168,11 +168,11 @@ def test_filter_by_confidence():
     }
 
     processor = OverlapPostProcessor(mock_image, mock_predictions)
-    overlaps = processor.find_overlaps()
+    overlaps = processor._find_overlaps()
 
     assert len(overlaps) == 2
 
-    processor.filter_by_confidence(overlaps)
+    processor._filter_by_confidence_if_overlaps_exist(overlaps)
     filtered_predictions = processor.prediction_dict
 
     assert len(filtered_predictions["boxes"]) == 2
@@ -192,8 +192,8 @@ def test_distribute_by_confidence():
     }
 
     processor = OverlapPostProcessor(mock_image, mock_predictions)
-    overlaps = processor.find_overlaps()
-    processor.distribute_by_confidence(overlaps)
+    overlaps = processor._find_overlaps()
+    processor._distribute_by_confidence_if_overlaps_exist(overlaps)
     filtered_predictions = processor.prediction_dict
 
     assert len(filtered_predictions["boxes"]) == 3
