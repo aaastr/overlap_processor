@@ -1,5 +1,5 @@
 # Overlap Processor
-Process overlapping maks in object detection based instance segmentation.
+Process overlapping masks in object detection based instance segmentation.
 
 
 ## Install
